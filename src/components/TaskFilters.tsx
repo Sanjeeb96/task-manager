@@ -1,9 +1,7 @@
 import React, { useState } from "react";
-import { Task, TaskCategory } from "../types";
+import {  TaskCategory } from "../types";
 
-interface TaskFiltersProps {
-  // In a real-world app you might pass functions to update filters in a parent component
-}
+type TaskFiltersProps = Record<string, never>;
 
 const TaskFilters: React.FC<TaskFiltersProps> = () => {
   const [category, setCategory] = useState<TaskCategory | "All">("All");

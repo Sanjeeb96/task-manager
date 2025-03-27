@@ -29,8 +29,8 @@ const TaskHeader: React.FC<TaskHeaderProps> = ({ setView }) => {
         <h1 className="text-xl font-bold">TaskBuddy</h1>
         <div className="flex items-center gap-2 flex-row">
           <img
-            src={user?.photoURL || "https://via.placeholder.com/150"}
-            alt={user?.displayName || "User"}
+            src={user?.photoURL || "/default.svg"} // 👈 Update default avatar
+            alt={"User"}
             style={{ width: "32px", height: "32px", borderRadius: "50%" }}
           />
           <span>{user?.displayName}</span>

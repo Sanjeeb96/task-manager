@@ -6,9 +6,12 @@ import {
   collection,
   updateDoc,
   doc,
-  //   serverTimestamp,
+  getDoc as fetchDoc,
   arrayUnion,
+  DocumentData,
+  DocumentReference,
 } from "firebase/firestore";
+// import { auth } from "../firebase/firebaseConfig"; // Import auth from your Firebase config
 import ActivityLog from "./ActivityLog";
 
 interface TaskModalProps {
@@ -16,6 +19,7 @@ interface TaskModalProps {
   onClose: () => void;
   existingTask?: Task;
   onTaskCreated: (task: Task) => void;
+  onTaskUpdated: (updatedTask: Task) => void; // Callback for updating tasks
 }
 
 const TaskModal: React.FC<TaskModalProps> = ({
@@ -23,6 +27,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
   onClose,
   existingTask,
   onTaskCreated,
+  onTaskUpdated,
 }) => {
   const [name, setName] = useState(existingTask?.name || "");
   const [description, setDescription] = useState(
@@ -35,11 +40,29 @@ const TaskModal: React.FC<TaskModalProps> = ({
   const [status, setStatus] = useState<TaskStatus>(
     existingTask?.status || "TO-DO"
   );
-//   const [attachments, setAttachments] = useState<File[]>([]);
+  //   const [attachments, setAttachments] = useState<File[]>([]);
   const [activityLog] = useState<Activity[]>(existingTask?.activityLog || []);
 
   // Close modal on outside click (optional)
   const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    console.log("Existing Task:", existingTask); // Debugging
+    if (existingTask) {
+      setName(existingTask.name);
+      setDescription(existingTask.description || "");
+      setCategory(existingTask.category);
+      setDueDate(existingTask.dueDate);
+      setStatus(existingTask.status);
+    } else {
+      // Reset fields for creating a new task
+      setName("");
+      setDescription("");
+      setCategory("Work");
+      setDueDate("");
+      setStatus("TO-DO");
+    }
+  }, [existingTask]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -69,7 +92,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
       createdAt: existingTask?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       activityLog: existingTask?.activityLog || [],
-      attachments:[] // (Optional) Attachments for future implementation
+      attachments: [], // (Optional) Attachments for future implementation
     };
 
     // We’ll add an activity to the log
@@ -82,27 +105,25 @@ const TaskModal: React.FC<TaskModalProps> = ({
 
     // If editing
     try {
-      // Handle file uploads if attachments are provided
-    //   if (attachments.length > 0) {
-    //     const uploadedFiles = await Promise.all(
-    //       attachments.map(async (file) => {
-    //         const storageRef = ref(
-    //           storage,
-    //           `attachments/${Date.now()}_${file.name}`
-    //         );
-    //         await uploadBytes(storageRef, file);
-    //         return await getDownloadURL(storageRef); // Get the file URL
-    //       })
-    //     );
-    //     taskData.attachments = uploadedFiles; // Save file URLs in the task data
-    //   }
       if (existingTask?.id) {
         const taskRef = doc(db, "tasks", existingTask.id);
+        console.log("Document Path:", taskRef.path); // Debugging
+        const taskSnapshot = await getDoc(taskRef);
+
+        if (!taskSnapshot.exists()) {
+          console.error("No document found with ID:", existingTask.id);
+          console.log("Task Reference:", taskRef);
+          return;
+        }
+        console.log("Document Data:", taskSnapshot.data());
         await updateDoc(taskRef, {
           ...taskData,
           // Attach new activity to existing log
           activityLog: arrayUnion(newActivity),
         });
+        console.log("OnTaskUpdated:", onTaskUpdated(taskData));
+        onTaskUpdated(taskData);
+        // Update the task list in TaskBoard
       } else {
         // If creating new
         const newTask = {
@@ -115,6 +136,8 @@ const TaskModal: React.FC<TaskModalProps> = ({
         onTaskCreated(taskData); // Update the task list in TaskBoard
       }
 
+      console.log("Task Data:", taskData);
+
       // (Optional) handle file upload logic to Firebase Storage here
       // attachments.forEach((file) => { ... })
 
@@ -123,19 +146,12 @@ const TaskModal: React.FC<TaskModalProps> = ({
       setCategory("Work");
       setDueDate("");
       setStatus("TO-DO");
-    //   setAttachments([]);
+      //   setAttachments([]);
       onClose();
     } catch (error) {
       console.error("Error creating/updating task:", error);
     }
   };
-
-  // For demonstration: handle file selection in a drag-drop or input
-//   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-//     if (e.target.files) {
-//       setAttachments(Array.from(e.target.files));
-//     }
-//   };
 
   if (!isOpen) return null;
 
@@ -143,7 +159,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div
         ref={modalRef}
-        className="relative bg-white rounded-2xl w-full max-w-xl mx-4 md:mx-auto flex"
+        className="relative bg-white rounded-2xl w-full max-w-2xl mx-4 md:mx-auto flex"
       >
         {/* Left Content (Form) */}
         <div className="flex-1 p-4">
@@ -229,7 +245,7 @@ const TaskModal: React.FC<TaskModalProps> = ({
                 <input
                   type="file"
                   multiple
-                //   onChange={handleFileChange}
+                  //   onChange={handleFileChange}
                   className="w-full cursor-pointer"
                 />
               </div>
@@ -255,9 +271,9 @@ const TaskModal: React.FC<TaskModalProps> = ({
         </div>
 
         {/* Right Content (Activity Log) */}
-        {existingTask && <div className="w-[1px] bg-gray-200 mx-2"></div>}
+        {existingTask && <div className=" bg-gray-200"></div>}
         {existingTask && (
-          <div className="hidden md:block w-80 p-6 bg-gray-50 border-l border-gray-200">
+          <div className="hidden md:block w-60 p-6 bg-gray-50 border-l border-gray-200">
             <h3 className="text-md font-bold mb-4">Activity</h3>
             <ActivityLog activityLog={activityLog} />
           </div>
@@ -266,5 +282,9 @@ const TaskModal: React.FC<TaskModalProps> = ({
     </div>
   );
 };
+
+function getDoc(taskRef: DocumentReference<DocumentData, DocumentData>) {
+  return fetchDoc(taskRef);
+}
 
 export default TaskModal;

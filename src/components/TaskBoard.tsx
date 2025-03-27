@@ -5,16 +5,21 @@ import {
   //   verticalListSortingStrategy,
   arrayMove,
 } from "@dnd-kit/sortable";
-// import { useAuth } from "../hooks/useAuth";
 import { Task, TaskStatus } from "../types";
 // import TaskCard from "./TaskCard";
 import TaskModal from "./TaskModel";
 import { db } from "../firebase/firebaseConfig";
-import { collection, onSnapshot, query } from "firebase/firestore";
+import {
+  collection,
+  onSnapshot,
+  query,
+  doc,
+  deleteDoc,
+} from "firebase/firestore";
 import TaskHeader from "./TaskHeader";
 import TaskActionBar from "./TaskActionBar";
-// import TaskBoardView from "./TaskBoardView";
-
+import PopupMenu from "./PopupMenu";
+// import { getAuth } from "firebase/auth";
 interface TaskContextType {
   tasks: Task[];
   setTasks: React.Dispatch<React.SetStateAction<Task[]>>;
@@ -24,10 +29,12 @@ interface TaskContextType {
 
 const TaskContext = createContext<TaskContextType | null>(null);
 
-const TaskBoard: React.FC = () => {
-  //   const { user, logout } = useAuth();
+type TaskBoardProps = Record<string, never>;
+
+const TaskBoard: React.FC<TaskBoardProps> = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);
   const [view, setView] = useState<"board" | "list">("list");
   const statuses: TaskStatus[] = ["TO-DO", "IN-PROGRESS", "COMPLETED"];
@@ -40,7 +47,7 @@ const TaskBoard: React.FC = () => {
         id: doc.id,
         ...doc.data(),
       })) as Task[];
-      console.log("Fetched tasks:", fetchedTasks);
+      //   console.log("Fetched tasks:", fetchedTasks);
       setTasks(fetchedTasks);
     });
 
@@ -62,6 +69,47 @@ const TaskBoard: React.FC = () => {
     });
   };
 
+  const handleTaskUpdated = (updatedTask: Task) => {
+    setTasks((prevTasks) =>
+      prevTasks.map((task) => (task.id === updatedTask.id ? updatedTask : task))
+    );
+  };
+
+  interface HandleDeleteProps {
+    taskId: string;
+  }
+
+  const handleDelete = async (
+    taskId: HandleDeleteProps["taskId"]
+  ): Promise<void> => {
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this task?"
+    );
+    if (!confirmDelete) return;
+    try {
+      console.log("Deleting task with ID:", taskId);
+      await deleteDoc(doc(db, "tasks", taskId)); // Delete from Firebase
+      setTasks((prevTasks) => prevTasks.filter((task) => task.id !== taskId));
+      console.log(`Task with ID ${taskId} deleted successfully.`);
+    } catch (error) {
+      console.error("Error deleting task:", error);
+    }
+  };
+
+  const handleOpenEditModal = (task: Task) => {
+    console.log("Editing Task:", task);
+    setSelectedTask(task); // Set the selected task
+    setIsModalOpen(true); // Open the modal
+  };
+
+  const closeModal = () => {
+    setSelectedTask(null); // Clear the selected task
+    setIsModalOpen(false); // Close the modal
+  };
+
+  // Determine which tasks to display (filtered or all)
+  const tasksToDisplay = filteredTasks.length > 0 ? filteredTasks : tasks;
+
   return (
     <TaskContext.Provider
       value={{ tasks, setTasks, filteredTasks, setFilteredTasks }}
@@ -71,13 +119,19 @@ const TaskBoard: React.FC = () => {
         <TaskHeader setView={setView} view={view} />
 
         {/* TaskActionBar Component */}
-        <TaskActionBar onAddTaskClick={() => setIsModalOpen(true)} />
+        <TaskActionBar
+          tasks={tasks}
+          onAddTaskClick={() => setIsModalOpen(true)}
+          setFilteredTasks={setFilteredTasks}
+        />
         <hr className="mb-4" />
 
         {/* TaskModal Component */}
         <TaskModal
           isOpen={isModalOpen}
-          onClose={() => setIsModalOpen(false)} // Close the modal
+          existingTask={selectedTask || undefined}
+          onTaskUpdated={handleTaskUpdated}
+          onClose={closeModal} // Close the modal
           onTaskCreated={handleTaskCreated} // Handle the task creation
         />
 
@@ -94,7 +148,10 @@ const TaskBoard: React.FC = () => {
                 </tr>
               </thead>
               {statuses.map((status) => {
-                const filteredTasks = tasks.filter(
+                // const filteredTasks = tasks.filter(
+                //   (task) => task.status === status
+                // );
+                const filteredByStatus = tasksToDisplay.filter(
                   (task) => task.status === status
                 );
                 return (
@@ -111,19 +168,20 @@ const TaskBoard: React.FC = () => {
                             : "bg-[#CEFFCC]"
                         }`}
                       >
-                        {status} ({filteredTasks.length})
+                        {/* {status} ({filteredTasks.length}) */}
+                        {status} ({filteredByStatus.length})
                       </td>
                     </tr>
                     {/* Task Rows */}
-                    {filteredTasks.length === 0 ? (
+                    {filteredByStatus.length === 0 ? (
                       <tr>
                         <td colSpan={5} className="text-gray-500 p-2">
                           No tasks in {status}
                         </td>
                       </tr>
                     ) : (
-                      filteredTasks.map((task, index) => {
-                        const isLastRow = index === filteredTasks.length - 1;
+                      filteredByStatus.map((task, index) => {
+                        const isLastRow = index === filteredByStatus.length - 1;
                         return (
                           <React.Fragment key={task.id}>
                             {/* Horizontal line above each task */}
@@ -141,7 +199,12 @@ const TaskBoard: React.FC = () => {
                               <td className="p-2">{task.dueDate || "N/A"}</td>
                               <td className="p-2">{task.status}</td>
                               <td className="p-2">{task.category}</td>
-                              <td className="p-2">...</td>
+                              <td className="p-2">
+                                <PopupMenu
+                                  onEdit={() => handleOpenEditModal(task)}
+                                  onDelete={() => handleDelete(task.id)}
+                                />
+                              </td>
                             </tr>
                           </React.Fragment>
                         );

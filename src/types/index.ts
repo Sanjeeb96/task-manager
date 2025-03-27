@@ -17,6 +17,7 @@ export interface Task {
   status: TaskStatus;
   createdAt?: string;
   updatedAt?: string;
+  // createdBy?: string;
   activityLog?: Activity[];
   attachments?: string[];
 }
